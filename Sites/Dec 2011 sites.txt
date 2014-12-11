@@ -1,0 +1,17 @@
+Grid	Lat/Lon hddd°mm.mmm'
+Datum	WGS 84
+
+Header	Name	Description	Type	Position	Altitude	Depth	Proximity	Temperature	Display Mode	Color	Symbol	Facility	City	State	Country	Date Modified	Link	Categories
+				Symbol & Name	Black	Flag, Blue							
+Waypoint	Site1	11-DEC-11 10:32:50AM	User Waypoint	S22 23.336 E31 08.886	1015 ft				Symbol & Name	Black	Flag, Blue							
+Waypoint	Site11	10-DEC-11 10:52:44AM	User Waypoint	S24 34.860 E31 30.743	1251 ft				Symbol & Name	Black	Flag, Blue							
+Waypoint	Site12	09-DEC-11 11:06:40AM	User Waypoint	S25 11.092 E31 15.246	1918 ft				Symbol & Name	Black	Flag, Blue							
+Waypoint	Site13	09-DEC-11 2:15:48PM	User Waypoint	S25 26.614 E31 26.938	1223 ft				Symbol & Name	Black	Flag, Blue							
+Waypoint	Site14	10-DEC-11 9:07:15AM	User Waypoint	S24 37.601 E31 47.717	996 ft				Symbol & Name	Black	Flag, Blue							
+Waypoint	Site3	11-DEC-11 9:41:55AM	User Waypoint	S22 38.235 E31 09.804	1275 ft				Symbol & Name	Black	Flag, Blue							
+Waypoint	Site4	11-DEC-11 8:52:22AM	User Waypoint	S22 37.923 E31 10.835	1393 ft				Symbol & Name	Black	Flag, Blue							
+Waypoint	Site5	11-DEC-11 1:46:37PM	User Waypoint	S22 47.919 E31 14.519	1239 ft				Symbol & Name	Black	Flag, Blue							
+Waypoint	Site6	11-DEC-11 7:00:18AM	User Waypoint	S22 55.442 E31 14.006	1054 ft				Symbol & Name	Black	Flag, Blue							
+Waypoint	Site7	11-DEC-11 3:13:05PM	User Waypoint	S23 14.143 E31 21.946	1178 ft				Symbol & Name	Black	Flag, Blue							
+Waypoint	Site8	12-DEC-11 7:48:44AM	User Waypoint	S23 38.336 E31 25.279	1078 ft				Symbol & Name	Black	Flag, Blue							
+Waypoint	Site9	10-DEC-11 4:07:47PM	User Waypoint	S23 28.194 E31 30.002	1101 ft				Symbol & Name	Black	Flag, Blue							
