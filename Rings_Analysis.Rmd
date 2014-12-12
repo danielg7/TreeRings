@@ -1,5 +1,12 @@
-Preliminary analysis of Tree Growth Data
-========================================================
+---
+title: "Preliminary analysis of Tree Growth Data"
+output:
+  html_document:
+    keep_md: true
+    theme: journal
+    fig_caption: true
+    fig.path: 'figure_rmd/'
+---
 
 Load appropriate libraries.
 ```{r Libraries, warning=FALSE,message=FALSE}
