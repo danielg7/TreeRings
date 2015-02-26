@@ -11,7 +11,7 @@ sitesWx_long <- melt(sitesWx,id.vars="Year",variable_name="Station")
 names(sitesWx_long)[3] <- "AnnualPrecip"
 
 newWx <- read.csv("Weather/monthly_rainfall_2006_2010_paf-moo-sat-pre.txt")
-newWx_annual <- ddply(newWx,.(YEAR,STATION),summarize,AnnualPrecip = sum(SumOfMM))
+newWx_annual <- ddply(newWx,.(YEAR,STATION),summarise,AnnualPrecip = sum(SumOfMM))
 names(newWx_annual) <- c("Year","Station","AnnualPrecip")
 
 newWx_annual_subset <- subset(newWx_annual,Year >= 2009)
