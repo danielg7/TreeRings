@@ -1,0 +1,35 @@
+\documentclass{article}
+
+\title{Pretorioskop Tree Ring Examples}
+
+\begin{document}
+\maketitle
+\SweaveOpts{concordance=TRUE}
+
+Initialize everything we need...
+<<Init>>=
+library(plyr)
+library(lattice)
+
+setwd("/Users/danielgodwin/Dropbox/Graduate School/Dissertation/Chapter 3 - Growth/TreeRings/")
+
+@
+
+We start by manipulating the data into readable format...
+<<DataMunge>>=
+PRET2011_RINGW <- read.csv("MeasuredGrowth/TrialProject/PRET2011_RINGW_LongForm.csv")
+
+PRET2011_MeanMonthlyPrecip <- read.csv("Weather/Pretorioskop_MeanMonthlyPrecip.csv")
+
+PRET2011_MeanMonthlyPrecip$YEAR <- factor(PRET2011_MeanMonthlyPrecip$YEAR)
+PRET2011_RINGW$YEAR <- factor(PRET2011_RINGW$YEAR)
+
+PRET2011_CombinedByYear <- merge(PRET2011_RINGW,PRET2011_MeanMonthlyPrecip,by="YEAR")
+
+PRET2011_CombinedByYear <- ddply(.data=PRET2011_CombinedByYear, .(YEAR), mutate, MMbyYear = sum(SumOfMM))
+@
+
+
+
+
+\end{document}

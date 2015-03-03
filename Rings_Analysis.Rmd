@@ -272,6 +272,16 @@ SpeciesSite.crn <- chron(castDF)
 }
 ```
 
+```{r ACF_check}
+for(k in unique(detrendedDF$Sample))
+  {
+  individual <- subset(detrendedDF,Sample == k)
+  print(acf(x = individual$RingWidth,plot = TRUE,main = paste(unique(individual$Species),unique(individual$Sample),unique(individual$Site))))
+  }
+
+
+```
+
 ### Detrended Growth by Species and Site
 
 
@@ -487,12 +497,12 @@ detrendWx_avgWRI_KNP <- ggplot(data = detrendedDF_summary_KNP, aes(x = meanLifeR
 
 ### Potential relatiosnhips between avg. rainfall and avg RWI
 
-```{r}
-wellAligned <- data.frame(Species = "Pseudolignum sensitivum", meanLifeRainfall = c(400,450,475,500,525,550,565), avgWRI = c(.5,.75,.8,1,1.7,1.8,2))
+```{r Fig_PotentialRxnships}
+wellAligned <- data.frame(Species = "Rainfall Limited, Positive", meanLifeRainfall = c(400,450,475,500,525,550,565), avgWRI = c(.5,.75,.8,1,1.7,1.8,2))
 
-reverseAligned <- data.frame(Species = "Pseudolignum contrasensitivum", meanLifeRainfall = c(400,450,475,500,525,550,565), avgWRI = c(2.1,1.6,1.1,1,.5,.3,.1))
+reverseAligned <- data.frame(Species = "Rainfall Limited, Negative", meanLifeRainfall = c(400,450,475,500,525,550,565), avgWRI = c(2.1,1.6,1.1,1,.5,.3,.1))
 
-nonAligned <- data.frame(Species = "Pseudolignum remissum", meanLifeRainfall = c(400,450,475,500,525,550,565), avgWRI = rnorm(n = 7, mean = 1, sd = .5))
+nonAligned <- data.frame(Species = "No Relationship", meanLifeRainfall = c(400,450,475,500,525,550,565), avgWRI = rnorm(n = 7, mean = 1, sd = 2))
 
 fakeDF <- rbind(wellAligned,reverseAligned)
 fakeDF <- rbind(fakeDF,nonAligned)
@@ -507,10 +517,10 @@ RWI_wx_h0_big+
         legend.direction="vertical")+
     ylab("log Average Ring Width Index")+
    ggtitle("")+
-  xlab("log Mean Lifetime Rainfall (mm)")+
-   geom_point(size = 4)+
+  xlab("log Mean Lifetime Rainfall")+
+   #geom_point(size = 4)+
   scale_colour_discrete()+
- # geom_smooth(method="nls")+
+  geom_smooth(size = 2, method="lm")+
   guides(col = guide_legend(ncol = 8,title.position = "top"))+
    facet_wrap(~Species, ncol=3)
    
