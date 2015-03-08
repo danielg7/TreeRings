@@ -41,149 +41,175 @@ detrendedBasalDiameter_lab <- expression(paste("Detrended Basal Diameter (",
   u, m,")", sep=""))
 
 detrendedRingWidth_lab <- expression(paste("Detrended Ring Width (",u, m,")", sep=""))
+
+BAI_lab <- expression(paste("Basal Area Increment (",u, m,")", sep=""))
+
+
 ```
 Read in data.
+
 ```{r ReadInData, echo=TRUE,warning=FALSE,message=FALSE}
-Melon_Sites <- read.csv("Sites/Mellon_Tree.csv")
-Melon_Species <- read.csv("MeasuredGrowth/MellonGrant/MellonGrant_Species.csv")
-Melon_Growth <- read.csv("MeasuredGrowth/MellonGrant/MellonGrant_TreeGrowth_LongForm.csv")
-Melon_Growth <- subset(Melon_Growth,SAMPLE != "M26")
+Mellon_Sites <- read.csv("Sites/Mellon_Tree.csv")
+Mellon_Species <- read.csv("MeasuredGrowth/MellonGrant/MellonGrant_Species.csv")
+Mellon_Growth <- read.csv("MeasuredGrowth/MellonGrant/MellonGrant_TreeGrowth_LongForm_YearAdjusted.csv")
 
-source("WeatherProcessor.R")
-PRET2011_RINGW_LongForm <- read.csv("MeasuredGrowth/TrialProject/PRET2011_RINGW_LongForm.csv")
 
-names(PRET2011_RINGW_LongForm) <- c("Sample","Year","RingWidth")
-
-WRF_Rings <- read.csv("MeasuredGrowth/MellonGrant/WRF_TreeGrowth_LongForm.csv"
+WRF_Rings <- read.csv("MeasuredGrowth/MellonGrant/WRF_Rings.csv"
                       ,comment.char = "#",
-                      skip = 1)
-WRF_Rings$Year <- WRF_Rings$Year + 113
-names(WRF_Rings)[1] <- "Sample"
-names(WRF_Rings)[3] <- "RingWidth"
+                      skip = 0)
+
 WRF_Rings$Site <- "WRF"
 
 WRF_Species <- read.csv("MeasuredGrowth/MellonGrant/WRF_Species.csv",comment.char = "#",
                       skip = 1)
+```
 
+Process weather data.
 
+```{r wx, warning=FALSE, message=FALSE}
+source("WeatherProcessor.R")
+```
 
-names(Melon_Sites)[2] <- "Sample"
-names(Melon_Species) <- c("Sample","Species")
+Subset and combine Mellon and WRF data
 
-Melon_Master <- merge(Melon_Sites,Melon_Species, by="Sample",all.x = TRUE)
-Melon_Master$Species.x <- NULL
-names(Melon_Master)[5] <- "Species"
+```{r TransformMellonData, echo=TRUE,warning=FALSE,message=FALSE}
+names(Mellon_Species) <- c("Sample","Species")
+
+Mellon_Master <- merge(Mellon_Sites,Mellon_Species, by="Sample",all = TRUE)
 
 WRF_Rings <- merge(WRF_Rings,WRF_Species,by="Sample")
-#WRF_Rings$Species.x <- NULL
-#names(Melon_Master)[5] <- "Species"
 WRF_Rings <- na.omit(WRF_Rings)
 
-names(Melon_Growth) <- c("Sample","Year","RingWidth")
+Mellon_Master <- merge(Mellon_Master,Mellon_Growth,by="Sample")
 
-Melon_Master <- merge(Melon_Master,Melon_Growth,by="Sample")
-Melon_Master$Diam <- NULL
-Melon_Master$TTT <- NULL
+Rings_Master <- rbind(Mellon_Master,WRF_Rings)
+```
 
-PRET2011_RINGW_LongForm$Site <- "PRE"
-PRET2011_RINGW_LongForm$Species <-"Terminalia sericea"
+Calculate basal area increment.
 
-Rings_Master <- rbind(Melon_Master,PRET2011_RINGW_LongForm)
-
-Rings_Master <- rbind(Rings_Master,WRF_Rings)
-
-#Rings_Master$RingWidth <- Rings_Master$RingWidth/1000
+```{r}
 
 Rings_Master <- Rings_Master[order(Rings_Master$Sample,Rings_Master$Year),]
 
-Rings_Master <- ddply(Rings_Master,.(Sample),mutate,Growth = cumsum(RingWidth))
+Rings_Master <- ddply(Rings_Master,.(Sample),mutate,RingWidthToDate = cumsum(RingWidth_um))
 
-Rings_Master$EstCrossSection <- (Rings_Master$Growth)^2 * pi
-Rings_Master$EstBasalDiameter <- (Rings_Master$Growth) * 2
+Rings_Master$EstBasalArea <- (Rings_Master$RingWidthToDate) * 2 * pi
 
-Rings_Master <- ddply(Rings_Master,.(Sample),mutate,YearOfGrowth = Year - min(Year)+1)
-
-Rings_Master_AllWx <- merge(Rings_Master,Kruger_Wx_Combined,by.x=c("Year","Site"),by.y=c("Year","Station"))
-
-#MAP <- read.csv("Weather/Kruger_MAP.csv")
-#Rings_Master_AllWx <- merge(Melon_AllWx,MAP,by.x="Site",by.y="Station")
-
-Rings_Kruger <- subset(Rings_Master,Site != "WRF")
-Rings_WRF <- subset(Rings_Master,Site == "WRF")
 ```
 
-### Plot of Ring Width by Site
 
-```{r testBySite, fig.height=8.5, fig.width=11, echo=FALSE,warning=FALSE,message=FALSE, fig.ext='png'}
-testBySite <- ggplot(data = Rings_Kruger, aes(x = Year, y=RingWidth, factor=Sample, colour = Species))
-testBySite+
-  myTheme+
-  ylab(RingWidth_lab)+
-  ggtitle("Kruger National Park Samples")+
-  geom_point()+
-  geom_line()+
-  facet_wrap(Species~Site,ncol=2)
+```{r}
+b <- ddply(Rings_Master,.(Sample),mutate,PreviousYear = Year - 1)
 
-testBySite_WRF <- ggplot(data = Rings_WRF, aes(x = Year, y=RingWidth, factor=Sample, colour = Species))
-testBySite_WRF+
-  myTheme+
-  ylab(RingWidth_lab)+
-  ggtitle("Wits Rural Facility Samples")+
-  geom_point()+
-  geom_line()+
-  facet_wrap(~Species,ncol=2)
+intermediateRings <- merge(Rings_Master,b,by.x = c("Sample","Year"), by.y = c("Sample","PreviousYear"),all.x=TRUE)
+
+# Need to add in final size calculation for 2013
+
+intermediateRings[,12] <- NULL # Remove extra year column
+intermediateRings$BAI <- 
+  (intermediateRings$EstBasalDiameter.y - intermediateRings$EstBasalDiameter.x)
+
+intermediateRings$Sensitivity_step <- (intermediateRings$EstBasalDiameter.y - intermediateRings$EstBasalDiameter.x) / (intermediateRings$EstBasalDiameter.y + intermediateRings$EstBasalDiameter.x)/2
+
+colsToKeep <- c("Sample","BAI","Site.x","Year","Species.x","Sensitivity_step")
+
+ringsBAI <- intermediateRings[colsToKeep]
+
+names(ringsBAI) <- c("Sample","BAI","Site","Year","Species","Sensitivity_step")
+
+ringsBAI <- ddply(ringsBAI,.(Sample),mutate,YearOfGrowth = Year - min(Year)+1)
+
+Rings_Master_AllWx <- merge(ringsBAI,Kruger_Wx_Combined,by.x=c("Year","Site"),by.y=c("Year","Station"))
+
+Sensitivity <- ddply(Rings_Master_AllWx,.(Site,Species,Sample),summarize,Sensitivity = sum(Sensitivity_step))
+
+Sensitivity_Site <- ddply(Sensitivity,.(Site,Species),summarize,Sensitivity = mean(Sensitivity))
+
+Rings_Kruger <- subset(Rings_Master_AllWx,Site != "WRF")
+Rings_WRF <- subset(Rings_Master_AllWx,Site == "WRF")
 ```
 
-### Plot of Basal Diameter by Year
+### Plot of Basal Area Increment by Year
 
 ```{r Fig_CrossSectinGrowthByYear, fig.height=6, fig.width=8, echo=FALSE,warning=FALSE,message=FALSE, fig.ext='png'}
 
 
-EstCrossSection_Kruger <- ggplot(data = Rings_Kruger, aes(x = Year, y= EstBasalDiameter, factor=Sample, colour = Species))
+EstCrossSection_Kruger <- ggplot(data = Rings_Kruger, aes(x = Year, y= BAI, factor=Sample, colour = Species))
 EstCrossSection_Kruger+
   myTheme+
   scale_x_tufte(breaks = c(1990,1995,2000,2005,2010,2015))+
-  ylab(BasalDiameter_lab)+
+  ylab(BAI_lab)+
   geom_point()+
   ggtitle("Kruger National Park Samples")+
   geom_line()+
   theme(legend.position="bottom")+
   guides(col = guide_legend(ncol = 1,title.position = "top"))+
-  facet_wrap(~Site,nrow=3)
+  facet_wrap(Species~Site,nrow=3)
 
-EstCrossSection_WRF <- ggplot(data = Rings_WRF, aes(x = Year, y= EstBasalDiameter, factor=Sample, colour = Species))
+EstCrossSection_WRF <- ggplot(data = Rings_WRF, aes(x = Year, y= BAI, factor=Sample, colour = Species))
 EstCrossSection_WRF+
   myTheme+
   scale_x_tufte(breaks = c(1990,1995,2000,2005,2010,2015))+
-  ylab(BasalDiameter_lab)+
+  ylab(BAI_lab)+
   geom_point()+
   geom_line()+
   ggtitle("Wits Rural Facility Samples")+
   theme(legend.position="bottom")+
+  facet_wrap(~Species,nrow=3)+
   guides(col = guide_legend(ncol = 8,title.position = "top"))
 ```
 
-### Plot of Basal Diameter by Year of Growth
+## Plot of BAI ~ WX
 
-```{r Fig_CrossSectionGrowthByYOG, fig.height=6, fig.width=8, echo=FALSE,warning=FALSE,message=FALSE, fig.ext='png'}
-EstCrossSectionYOG_Kruger <- ggplot(data = Rings_Kruger, aes(x = YearOfGrowth, y= EstBasalDiameter, factor=Sample, colour = Site))
-EstCrossSectionYOG_Kruger+
+```{r Fig_BAIbyWx, fig.height=6, fig.width=8, echo=FALSE,warning=FALSE,message=FALSE, fig.ext='png'}
+BAIbyAnnualRainfall_Kruger <- ggplot(data = Rings_Kruger, aes(x = AnnualPrecip, y= BAI, factor=Species, colour = Site))
+BAIbyAnnualRainfall_Kruger+
   myTheme+
-  ylab(BasalDiameter_lab)+
+  ylab(BAI_lab)+
+  xlab("Annual Precip")+
+  geom_point()+
+  stat_smooth(method="lm")+
+  ggtitle("Kruger National Park Samples")+
+  theme(legend.position="bottom",legend.direction="vertical")+
+  guides(col = guide_legend(ncol = 2,title.position = "top"))+
+  facet_wrap(Site ~ Species)
+
+
+BAIbyAnnualRainfall_WRF <- ggplot(data = Rings_WRF, aes(x = AnnualPrecip, y= BAI, factor=Species, colour = Species))
+BAIbyAnnualRainfall_WRF+
+  myTheme+
+  #scale_x_tufte()+
+  ylab(BAI_lab)+
+  xlab("Annual Precip")+
+  geom_point()+
+  stat_smooth(method="lm")+
+  ggtitle("Wits Rural Facility Samples")+
+  theme(legend.position="bottom",legend.direction="vertical")+
+  guides(col = guide_legend(ncol = 8,title.position = "top"))+
+  facet_wrap(~ Species,nrow=4)
+```
+
+### Plot of Basal Area Increment by Year of Growth
+
+```{r Fig_BAIByYOG, fig.height=6, fig.width=8, echo=FALSE,warning=FALSE,message=FALSE, fig.ext='png'}
+BAIbyYOG_Kruger <- ggplot(data = Rings_Kruger, aes(x = YearOfGrowth, y= BAI, factor=Sample, colour = Site))
+BAIbyYOG_Kruger+
+  myTheme+
+  ylab(BAI_lab)+
   xlab("Age")+
   geom_point()+
   geom_line()+
   ggtitle("Kruger National Park Samples")+
   theme(legend.position="bottom",legend.direction="vertical")+
   guides(col = guide_legend(ncol = 2,title.position = "top"))+
-  facet_wrap(~ Species, nrow=1)
+  facet_wrap(Site ~ Species)
 
 
-EstCrossSectionYOG_WRF <- ggplot(data = Rings_WRF, aes(x = YearOfGrowth, y= EstBasalDiameter, factor=Sample, colour = Species))
-EstCrossSectionYOG_WRF+
+BAIbyYOG_WRF <- ggplot(data = Rings_WRF, aes(x = YearOfGrowth, y= BAI, factor=Sample, colour = Species))
+BAIbyYOG_WRF+
   myTheme+
   #scale_x_tufte()+
-  ylab(BasalDiameter_lab)+
+  ylab(BAI_lab)+
   xlab("Age")+
   geom_point()+
   geom_line()+
@@ -193,203 +219,29 @@ EstCrossSectionYOG_WRF+
   facet_wrap(~ Species,nrow=4)
 ```
 
-Detrending
-========
-* Fit linear model to each site, species
-* Subtract predicted values from each object.
 
-```{r detrending,echo=FALSE,warning=FALSE,message=FALSE,include=TRUE}
-
-blankDummyDF <- data.frame(Sample=factor(), Species = factor(), AvgRW = numeric(),Site=factor(),YearOfGrowth=numeric(), RingWidth=numeric(),Year=numeric(),AnnualPrecip=numeric(),DetrendedRW=numeric())
-
-for(k in unique(Rings_Master_AllWx$Species))
-{
-  SpeciesSubset <- subset(Rings_Master_AllWx,Species == k)
-  for(l in unique(SpeciesSubset$Site)){
-    SiteSubset <- subset(SpeciesSubset,Site == l)
-    
-    print(c(k,l))
-    
-    colsKeep <- c("Site","Year","Sample","Species","RingWidth","YearOfGrowth","AnnualPrecip")
-    SiteSubset <- SiteSubset[colsKeep]
-  
-   SiteSubset$DetrendedRW  <- detrend.series(as.numeric(SiteSubset$RingWidth),
-                                             make.plot = TRUE,
-                                             method = "Spline")
-   
-    
-    blankDummyDF <- rbind(blankDummyDF,SiteSubset)
-  }
-}
-
-detrendedDF <- blankDummyDF
-
-#detrendedDF <- merge(detrendedDF,MAP,by.x="Site",by.y="Station")
-#detrendedDF$DetrendedRW <- exp(detrendedDF$DetrendedRW)
-
-#detrendedDF$subAvgRW <- detrendedDF$RingWidth - detrendedDF$AvgRW
-
-detrendedDF <- detrendedDF[order(detrendedDF$Sample,detrendedDF$YearOfGrowth),]
-detrendedDF <- ddply(detrendedDF,.(Sample),mutate,EstBasalDiameter = 2*cumsum(DetrendedRW))
-
-detrendedDF[mapply(is.infinite, detrendedDF)] <- NA
-detrendedDF <- na.omit(detrendedDF)
-
-detrendedDF <- ddply(detrendedDF,.(Sample),mutate,meanLifeRainfall = mean(AnnualPrecip,na.rm=TRUE))
-
-detrendedDF_Kruger <- subset(detrendedDF,Site != "WRF")
-detrendedDF_WRF <- subset(detrendedDF,Site == "WRF")
- 
-
-rm(blankDummyDF)
-#rm(SiteSubset)
-#rm(detrendModel)
-rm(SpeciesSubset)
-```
-
-
-```{r}
-for(k in unique(detrendedDF$Species))
-{
-  SpeciesSubset <- subset(detrendedDF,Species == k)
-  
-  if(length(unique(as.character(SpeciesSubset$Sample))) > 2){
-  for(l in unique(SpeciesSubset$Site)){
-    SiteSubset <- subset(SpeciesSubset,Site == l)
-    
-    colsKeep <- c("Site","Year","Sample","Species","DetrendedRW","YearOfGrowth","AnnualPrecip")
-    SiteSubset <- SiteSubset[colsKeep]
-
-melted1 <- melt(SiteSubset,id.vars=c("Year","Sample"),measure.vars="DetrendedRW",value.name="DetrendedRW")
-
-castDF <- dcast(melted1,Year ~ Sample,mean)
-
-castDF[mapply(is.nan, castDF)] <- NA
-
-SpeciesSite.crn <- chron(castDF)
-}
-}
-}
-```
-
-```{r ACF_check}
-for(k in unique(detrendedDF$Sample))
+```{r ACF_check, include=FALSE,eval=FALSE}
+for(k in unique(Rings_Master_AllWx$Sample))
   {
-  individual <- subset(detrendedDF,Sample == k)
-  print(acf(x = individual$RingWidth,plot = TRUE,main = paste(unique(individual$Species),unique(individual$Sample),unique(individual$Site))))
+  individual <- subset(Rings_Master_AllWx,Sample == k)
+  print(acf(x = individual$BAI,plot = TRUE,main = paste(unique(individual$Species),unique(individual$Sample),unique(individual$Site))))
   }
 
 
 ```
 
-### Detrended Growth by Species and Site
+### Relationship Between Annual Rainfall and Basal Area Increment
 
-
-```{r Fig_detrendedAnnualRings, fig.height=8.5, fig.width=11, echo=FALSE,warning=FALSE,message=FALSE, fig.ext='png'}
-
-#dtRings_Kruger <- ddply(Rings_Kruger,.(Sample),mutate,avgRW = mean(RingWidth))
-#dtRings_Kruger$dtRW <- dtRings_Kruger$RingWidth - dtRings_Kruger$avgRW
-
-
-detrendedGrowth_KNP <- ggplot(data = detrendedDF_Kruger, aes(x = Year, y=DetrendedRW, factor=Sample, colour = Species))+
-  myTheme+
-  ggtitle("(a).")+
-  ylab("Ring Width Index")+
-  theme(legend.position="none",legend.direction="vertical")+
-  #ggtitle("Kruger National Park Samples")+
-  geom_point(size=2)+
-  xlab("")+
-    theme(plot.title = element_text(size=12,hjust="0",family = "sans",face="plain"),
-        strip.text = element_text(family = "sans", size=10),
-        strip.background = element_rect(colour="grey", fill="lightgrey"))+
-  geom_line(size=.25)+
-  facet_wrap(Species~Site,ncol=2)
-
-detrendedGrowth_WRF <- ggplot(data = detrendedDF_WRF, aes(x = Year, y=DetrendedRW, factor=Sample, colour = Species))+
-  myTheme+
-  ggtitle("(b).")+
-    theme(plot.title = element_text(size=12,hjust="0",family = "sans",face="plain"),
-        strip.text = element_text(family = "sans", size=10),
-        strip.background = element_rect(colour="grey", fill="lightgrey"))+
-  ylab("Ring Width Index")+
-  xlab("")+
- # ggtitle("Wits Rural Facility Samples")+
-  geom_point(size=2)+
-  theme(legend.position="none",legend.direction="vertical")+
-  geom_line(size=.25)+
-  facet_wrap(Species~Site,ncol=2)
-
-grid.arrange(detrendedGrowth_KNP,detrendedGrowth_WRF,nrow=1)
-```
+```{r Fig_AvgBAI_AvgWx, fig.height=6, fig.width=8, echo=FALSE,warning=FALSE,message=FALSE, fig.ext='png'}
+avgBAI_WRF_WX <- na.omit(ddply(Rings_WRF,.(Species,Year),mutate,avgBAI = mean(BAI)))
+avgBAI_KNP_WX <- na.omit(ddply(Rings_Kruger,.(Species,Year),mutate,avgBAI = mean(BAI)))
 
 
 
-```{r Fig_DetrendedGrowth, fig.height=6, fig.width=8, echo=FALSE,warning=FALSE,message=FALSE, fig.ext='png'}
-
-
-detrend_Kruger <- ggplot(data = detrendedDF_Kruger, aes(x = Year, y= EstBasalDiameter, factor=Sample, colour = Species))
- detrend_Kruger+
+BAI_Wx_WRF <- ggplot(data = avgBAI_WRF_WX, aes(x = AnnualPrecip, y= avgBAI, factor=Site, colour = Species))
+ BAI_Wx_WRF+
    myTheme+
-   ylab(detrendedBasalDiameter_lab)+
- # xlab("Cumulative Rainfall To Date (mm)")+
-   geom_point()+
-   geom_line()+
-  ggtitle("Kruger National Park Samples")+
-  theme(legend.position="bottom",legend.direction="vertical")+
-  guides(col = guide_legend(ncol = 8,title.position = "top"))+
-   facet_wrap(~Site)
-
-
-
- detrend_WRF <- ggplot(data = detrendedDF_WRF, aes(x = Year, y= EstBasalDiameter, factor=Sample, colour = Species))
- detrend_WRF+
-   myTheme+
-   ylab(detrendedBasalDiameter_lab)+
-  # xlab("Cumulative Rainfall To Date (mm)")+
-   geom_point()+
-   geom_line()+
-  ggtitle("Wits Rural Facility Samples")+
-  theme(legend.position="bottom",legend.direction="vertical")+
-  guides(col = guide_legend(ncol = 8,title.position = "top"))
-
-```
-
-```{r bigCOAP}
-detrended_Spec_KNP <- subset(detrendedDF_Kruger,Species == "Combretum apiculatum")
-
-levels(detrended_Spec_KNP$Site) <- paste("Site",seq(1,11,1))
-
-COAP_big <- ggplot(data = detrended_Spec_KNP, aes(x = Year, y= DetrendedRW, factor=Sample, colour = Sample))
- COAP_big+
-   theme_bw()+
-  theme(text = element_text(size = 32),
-  #      panel.grid.major = element_line(size = 1, colour = "grey75"),
-   #     panel.grid.minor = element_line(size = 1, colour = "grey25"),
-        legend.position="none",
-        legend.direction="vertical")+
-   ylab("Ring Width Index")+
- # xlab("Cumulative Rainfall To Date (mm)")+
-   geom_point(size = 4)+
-   geom_line(size = 2)+
-  scale_colour_discrete()+
-  ggtitle(expression(paste("Kruger National Park Samples - ",italic("Compretum apiculatum"))))+
-  guides(col = guide_legend(ncol = 8,title.position = "top"))+
-   facet_wrap(~Site, ncol=2)
-```
-
-
-### Relationship Between Annual Rainfall and Detrended Growth
-
-```{r Fig_DetrendedGrowthAndWx, fig.height=6, fig.width=8, echo=FALSE,warning=FALSE,message=FALSE, fig.ext='png'}
-avgRWI_WRF_WX <- ddply(detrendedDF_WRF,.(Species,Year),mutate,avgRWI = mean(DetrendedRW))
-avgRWI_KNP_WX <- ddply(detrendedDF_Kruger,.(Species,Year),mutate,avgRWI = mean(DetrendedRW))
-
-
-
-detrendWx_BD_WRF <- ggplot(data = avgRWI_WRF_WX, aes(x = AnnualPrecip, y= avgRWI, factor=Site, colour = Species))
- detrendWx_BD_WRF+
-   myTheme+
-   ylab(detrendedRingWidth_lab)+
+   ylab("Mean Basal Area Increment")+
   xlab("Annual Precipitation (mm)")+
    geom_point()+
   ggtitle("Wits Rural Facility Samples")+
@@ -398,100 +250,68 @@ detrendWx_BD_WRF <- ggplot(data = avgRWI_WRF_WX, aes(x = AnnualPrecip, y= avgRWI
   guides(col = guide_legend(ncol = 8,title.position = "top"))+
   facet_wrap(~Species)
 
- detrendWx_BD_Kruger <- ggplot(data = avgRWI_KNP_WX, aes(x = AnnualPrecip, y= avgRWI, colour = Species, group = Site))
- detrendWx_BD_Kruger+
+ BAI_Wx_KNP <- ggplot(data = avgBAI_KNP_WX, aes(x = AnnualPrecip, y= avgBAI, colour = Species, group = Site))
+ BAI_Wx_KNP+
    myTheme+
-   ylab("Ring Width Index")+
+   ylab("Mean Basal Area Increment")+
   xlab("Annual Precipitation (mm)")+
-   geom_point(size = 5)+
+   geom_point(size = 3)+
   ggtitle("Kruger National Park Samples")+
-  # geom_smooth(method="glm")+
+  geom_smooth(method="glm")+
   theme(text = element_text(size = 25),legend.position="none",legend.direction="vertical")+
   guides(col = guide_legend(ncol = 8,title.position = "top"))+
-  facet_grid(~Species)
+  facet_grid(Site~Species)
 
-for(k in unique(avgRWI_KNP_WX$Species)){
-  m <- subset(avgRWI_KNP_WX,Species == k)
-  
+
+```
+
+
+```{r Fig_BAIAndLifeWx, fig.height=6, fig.width=8, echo=FALSE,warning=FALSE,message=FALSE, fig.ext='png'}
+BAI_summary_WRF <- ddply(Rings_WRF,.(Sample,Species),
+                                 summarize,
+                                 avgBAI = mean(BAI, na.rm = TRUE),
+                                 meanLifeRainfall = mean(AnnualPrecip,na.rm = FALSE))
+
+BAI_summary_KNP <- ddply(Rings_Kruger,.(Sample,Species),
+                                 summarize,
+                                 avgBAI = mean(BAI, na.rm = TRUE),
+                                 meanLifeRainfall = mean(AnnualPrecip,na.rm = FALSE))
+
+
+
+BAI_summary_WRF_plot <- ggplot(data = BAI_summary_WRF, aes(x = meanLifeRainfall, y= avgBAI, colour = Species))
+ BAI_summary_WRF_plot+
+   myTheme+
+   ylab("Mean Basal Area Increment")+
+  ggtitle("Wits Rural Facility Samples")+
+  xlab("Mean Lifetime Rainfall (mm)")+
+   geom_point()+
+   stat_smooth(method="lm")+
+  theme(legend.position="bottom",legend.direction="vertical")+
+  guides(col = guide_legend(ncol = 8,title.position = "top"))+
+  facet_wrap(~Species)
+
+
+BAI_summary_KNP_plot <- ggplot(data = BAI_summary_KNP, aes(x = meanLifeRainfall, y= avgBAI, group = Species, factor=Species, colour = Species))
+ BAI_summary_KNP_plot+
+   myTheme+
+   ylab("Mean Basal Area Increment")+
+   geom_point()+
+   ggtitle("Kruger National Park Samples")+
+  xlab("Mean Lifetime Rainfall (mm)")+
+   stat_smooth(method="lm")+
+  theme(legend.position="bottom",legend.direction="vertical")+
+  guides(col = guide_legend(ncol = 8,title.position = "top"))+
+  facet_wrap(~Species)
+
+for(k in unique(BAI_summary_KNP$Species))
+  {
+  l <- na.omit(subset(BAI_summary_KNP,Species == k))
   print(k)
+  print(summary(lm(formula = avgBAI ~ meanLifeRainfall,data = l)))
   
-  #hist(m$DetrendedRW)
-  KNP_null <- lmer(data = m, DetrendedRW ~ 1 + 1|Site)
-  KNP <- lmer(data = m, DetrendedRW ~ log(AnnualPrecip) + 1|Site)
-  
- print(summary(KNP))
- print(anova(KNP_null,KNP))
-}
+  }
 
-```
-
-### Relationship Between Annual Rainfall and Detrended Basal Diameter
-
-```{r Fig_DetrendedBDGrowthAndWx, fig.height=6, fig.width=8, echo=FALSE,warning=FALSE,message=FALSE, fig.ext='png'}
-
-
- detrendWx_BD_WRF <- ggplot(data = detrendedDF_WRF, aes(x = AnnualPrecip, y= EstBasalDiameter, factor=Site, colour = Species))
- detrendWx_BD_WRF+
-   myTheme+
-   ylab(detrendedBasalDiameter_lab)+
-  ggtitle("Wits Rural Facility Samples")+
-  xlab("Annual Rainfall (mm)")+
-   geom_point()+
-   geom_smooth(method="glm")+
-  theme(legend.position="bottom",legend.direction="vertical")+
-  guides(col = guide_legend(ncol = 8,title.position = "top"))+
-  facet_wrap(~Species)
-
- detrendWx_BD_Kruger <- ggplot(data = detrendedDF_Kruger, aes(x = AnnualPrecip, y= EstBasalDiameter, factor=Site, colour = Species))
- detrendWx_BD_Kruger+
-   myTheme+
-   ylab(detrendedBasalDiameter_lab)+
-   geom_point()+
-   ggtitle("Kruger National Park Samples")+
-  xlab("Annual Rainfall (mm)")+
-   geom_smooth(method="glm")+
-  theme(legend.position="bottom",legend.direction="vertical")+
-  guides(col = guide_legend(ncol = 8,title.position = "top"))+
-  facet_wrap(~Species)
-#  # geom_line()+
- #  facet_grid(~Site)
-```
-
-```{r Fig_DetrendedBDGrowthAndLifeWx, fig.height=6, fig.width=8, echo=FALSE,warning=FALSE,message=FALSE, fig.ext='png'}
-detrendedDF_summary_WRF <- ddply(detrendedDF_WRF,.(Site,Species,Sample),
-                                 summarize,
-                                 avgWRI = mean(DetrendedRW, na.rm = TRUE),
-                                 meanLifeRainfall = mean(meanLifeRainfall))
-
-detrendedDF_summary_KNP <- ddply(detrendedDF_Kruger,.(Site,Species,Sample),
-                                 summarize,
-                                 avgWRI = mean(DetrendedRW, na.rm = TRUE),
-                                 meanLifeRainfall = mean(meanLifeRainfall))
-
- detrendWx_avgWRI_WRF <- ggplot(data = detrendedDF_summary_WRF, aes(x = meanLifeRainfall, y= avgWRI, group = Site, colour = Species))
- detrendWx_avgWRI_WRF+
-   myTheme+
-   ylab("Average Ring Width Index")+
-  ggtitle("Wits Rural Facility Samples")+
-  xlab("Mean Lifetime Rainfall (mm)")+
-   geom_point()+
-   geom_smooth(method="glm")+
-  theme(legend.position="bottom",legend.direction="vertical")+
-  guides(col = guide_legend(ncol = 8,title.position = "top"))
-
-detrendWx_avgWRI_KNP <- ggplot(data = detrendedDF_summary_KNP, aes(x = meanLifeRainfall, y= avgWRI, group = Species, factor=Species, colour = Species))
- detrendWx_avgWRI_KNP+
-   myTheme+
-   ylab("Average Ring Width Index")+
-   geom_point()+
-   ggtitle("Kruger National Park Samples")+
-  xlab("Mean Lifetime Rainfall (mm)")+
-   geom_smooth(method="glm")+
-  theme(legend.position="bottom",legend.direction="vertical")+
-  guides(col = guide_legend(ncol = 8,title.position = "top"))+
-  facet_wrap(~Species)
-#  # geom_line()+
- #  facet_grid(~Site)
 ```
 
 
@@ -528,8 +348,8 @@ RWI_wx_h0_big+
 
 ### Recorded relationships between average RWI and mean rainfall
 
-```{r RWI_wx_big}
-RWI_wx_big <- ggplot(data = detrendedDF_summary_KNP, aes(x = log(meanLifeRainfall), y= log(avgWRI), group = Species, factor=Species, colour = Species))
+```{r RWI_wx_big,eval=FALSE}
+RWI_wx_big <- ggplot(data = BAI_summary_KNP, aes(x = log(meanLifeRainfall), y= log(avgBAI), group = Species, factor=Species, colour = Species))
  RWI_wx_big+
    theme_bw()+
   theme(text = element_text(size = 25),
@@ -546,47 +366,11 @@ RWI_wx_big <- ggplot(data = detrendedDF_summary_KNP, aes(x = log(meanLifeRainfal
   guides(col = guide_legend(ncol = 8,title.position = "top"))+
    facet_wrap(~Species, ncol=3)
    
-lm_sub_COMO <- subset(detrendedDF_summary_KNP,Species == "Colophospermum mopane")
-summary(lm(data=lm_sub_COMO,log(avgWRI) ~ log(meanLifeRainfall)))
-
-lm_sub_COAP <- subset(detrendedDF_summary_KNP,Species == "Combretum apiculatum")
-summary(lm(data=lm_sub_COAP,log(avgWRI) ~ log(meanLifeRainfall)))
-
-lm_sub_TESE <- subset(detrendedDF_summary_KNP,Species == "Terminalia sericea")
-summary(lm(data=lm_sub_TESE,log(avgWRI) ~ log(meanLifeRainfall)))
-
 ```
 ### Correlations
 
-```{r Correlations, echo=FALSE,include=FALSE}
+```{r Correlations, echo=FALSE,include=FALSE,eval=FALSE}
 
-justDetrendedRW_Site <- ddply(detrendedDF,.(Site,Species,Sample,Year),summarise,detrended_RingWidth = DetrendedRW)
-
-#justDetrendedRW_Site_Wide <- reshape(justDetrendedRW_Site, idvar = "Year", timevar="Sample", v.names="detrended_RingWidth",direction = "wide", drop=c("Site","Species")
-
-# for(k in unique(justDetrendedRW_Site$Site)){
-#   SiteSubset <- subset(justDetrendedRW_Site,Site == k)
-#   
-#   for(l in unique(SiteSubset$Species)){
-#     SiteSpeciesSubset <- subset(SiteSubset,Species == l)
-#   SiteSubset_Wide <- reshape(SiteSpeciesSubset, idvar = "Year", timevar="Sample", v.names="detrended_RingWidth",direction = "wide", drop=c("Site","Species"))
-# 
-#   print(k)
-#   print(l)
-#   corrMatrix_r <- as.data.frame(rcorr(as.matrix(SiteSubset_Wide))$r)
-#   corrMatrix_p <- as.data.frame(rcorr(as.matrix(SiteSubset_Wide))$P)
-#   
-#   print(corrMatrix_p)
-#   }
-# }
- 
-#correlationDF_Site <- ddply(detrendedDF,.(Site),summarise,siteCorr = cor(RingWidth,Year))
- #correlationDF_Species <- ddply(detrendedDF,.(Species),summarise,siteCorr = cor(RingWidth,Year))
- #correlationDF_SpeciesSite <- ddply(detrendedDF,.(Site,Species),summarise,siteCorr = cor(RingWidth,Year))
- 
-# stargazer(correlationDF_Site,type="text",summary=FALSE,title="Correlation by Sites")
-# stargazer(correlationDF_Species,type="text",summary=FALSE,title="Correlation by Species")
-# stargazer(correlationDF_SpeciesSite,type="text",summary=FALSE,title="Correlation by Species & Site")
 
 
 ```
@@ -596,7 +380,7 @@ Naive Growth
 naive_growth <- ddply(Rings_Master_AllWx,
                       .(Species,Site,Sample),
                       summarise,
-                      TotalSize = sum(EstBasalDiameter),
+                      TotalSize = sum(BAI),
                       Age = max(YearOfGrowth),
                       meanLifeRainfall = mean(AnnualPrecip,na.rm=TRUE),
                       sumLifeRainfall = sum(AnnualPrecip,na.rm=TRUE)
@@ -629,137 +413,6 @@ for(k in unique(naive_growth$Species)){
 }
   
 
-```
-
-```{r subsetModel,include=FALSE,eval=FALSE,echo=FALSE}
-test <- subset(Rings_Master,Species == "Combretum apiculatum")
-
-test <- subset(test,Site == "MOO")
-test_wide <- reshape(test,timevar = "Sample",idvar = c("Year"),direction = "wide",drop=c("EstCrossSection","AnnualPrecip","Species","Site","Growth","YearOfGrowth","EstBasalDiameter"))
-
-# sub <- na.omit(test_wide[,1:4])
-# 
-# plot(RingWidth.C76 ~ RingWidth.C77,sub)
-# abline(lm(RingWidth.C76 ~ RingWidth.C77,sub))
-# 
-# plot(RingWidth.C77 ~ RingWidth.C79,sub)
-# abline(lm(RingWidth.C77 ~ RingWidth.C79,sub))
-# 
-# plot(RingWidth.C76 ~ RingWidth.C79,sub)
-# abline(lm(RingWidth.C76 ~ RingWidth.C79,sub))
-# 
-# sub$resid_C76C77 <- abs(residuals(object = lm(RingWidth.C76 ~ RingWidth.C77,sub)))
-# sub$resid_C76C79 <- abs(residuals(object = lm(RingWidth.C76 ~ RingWidth.C79,sub)))
-# sub$resid_C77C79 <- abs(residuals(object = lm(RingWidth.C77 ~ RingWidth.C79,sub)))
-# 
-# 
-# plot(resid_C76C77 ~ Year,sub)
-# plot(resid_C76C79 ~ Year,sub)
-# plot(resid_C77C79 ~ Year,sub)
-
-
-for(k in unique(Rings_Master$Species))
-  {
-  SpecSub <- subset(Rings_Master,Species == k)
-  
-  for(m in unique(SpecSub$Site)){
-    SpecLocSub <- subset(SpecSub,Site == m)
-    if(length(unique(SpecLocSub$Sample)) >= 2){
-      
-      SpecLocSub_wide <- reshape(SpecLocSub,timevar = "Sample",idvar = c("Year"),direction = "wide",drop=c("EstCrossSection","AnnualPrecip","Species","Site","Growth","YearOfGrowth","EstBasalDiameter"))
-      print(colnames(SpecLocSub_wide))
-      
-      SpecLocSub_wide <- na.omit(SpecLocSub_wide)
-      
-      x <- as.matrix(SpecLocSub_wide[3])
-      y <- as.matrix(SpecLocSub_wide[2])
-      SpecLocSub_wide$resid <- abs(residuals(object = lm(y ~ x,cbind.data.frame(y,x))))
-      plot(log(resid) ~ Year,SpecLocSub_wide)
-
-
-      
-    }    
-  }
-}
-
-#sub$dist_C18 <- abs(sub$RingWidth.C18 - sub$pred_C18)
-
-```
-
-```{r echo=FALSE,eval=FALSE}
-#naiveCorr_Site <- ddply(naive_growth,.(Site),summarise,siteCorr = cor(NaiveRate,Age),siteTest = cor.test(NaiveRate,Age)$p.value)
-
-#naiveCorr_SpeciesSite <- ddply(naive_growth,.(Species,Site),summarise,siteCorr = cor(NaiveRate,Age),Count = length(NaiveRate))
-
-#test <- subset(naiveCorr_SpeciesSite,Count > 2)
- #correlationDF_Species <- ddply(detrendedDF,.(Species),summarise,siteCorr = cor(RingWidth,Year))
- #correlationDF_SpeciesSite <- ddply(detrendedDF,.(Site,Species),summarise,siteCorr = cor(RingWidth,Year))
-
-
-
-
-# for(i in unique(naive_growth$Species))
-#   {
-# tree_model_meanLife <- lm(log(TotalSize) ~ 0 + Age + meanLifeRainfall,data=subset(naive_growth,Species==i))
-# tree_model_sumLife <- lm(log(TotalSize) ~ 0 + Age + sumLifeRainfall,data=subset(naive_growth,Species==i))
-# tree_model_norain <- lm(log(TotalSize) ~ 0 + Age,data=subset(naive_growth,Species==i))
-# 
-# print(i)                 
-# print(summary(tree_model_meanLife))
-# print(summary(tree_model_sumLife))
-# print(summary(tree_model_norain))
-# print(anova(tree_model_norain,tree_model_meanLife))
-# print(anova(tree_model_norain,tree_model_sumLife))
-# 
-# 
-# 
-# }
-# 
-# COMO_naiveGrowth <- lm(log(TotalSize) ~ 0 + Age+sumLifeRainfall,data=subset(naive_growth,Species=COMO))
-# TESE_naiveGrowth <- lm(log(TotalSize) ~ 0 + Age+sumLifeRainfall,data=subset(naive_growth,Species=TESE))
-# COAP_naiveGrowth <- lm(log(TotalSize) ~ 0 + Age+sumLifeRainfall,data=subset(naive_growth,Species=COAP))                       
-# 
-# coef(COMO_naiveGrowth)
-# 
-# COMO_naive_DF <- subset(naive_growth,Species=="Colophospermum mopane")
-# COMO_naiveGrowth_nls <- nls(log(TotalSize) ~ SSasympOrig(Age, Asym,lrc),COMO_naive_DF)
-# summary(COMO_naiveGrowth_nls)
-# COMO_plotDF <- expand.grid(Age=seq(0,20))
-# COMO_plotDF$TotalSize <- exp(predict(COMO_naiveGrowth_nls,COMO_plotDF))
-# 
-# 
-# 
-# COAP_naive_DF <- subset(naive_growth,Species=="Combretum apiculatum")
-# COAP_naiveGrowth_nls <- nls(log(TotalSize) ~ SSasympOrig(Age, Asym,lrc),COAP_naive_DF)
-# summary(COAP_naiveGrowth_nls)
-# 
-# COAP_plotDF <- expand.grid(Age=seq(0,20))
-# COAP_plotDF$TotalSize <- exp(predict(COAP_naiveGrowth_nls,COAP_plotDF))
-# 
-# TESE_naive_DF <- subset(naive_growth,Species=="Terminalia sericea")
-# TESE_naiveGrowth_nls <- nls(log(TotalSize) ~ SSasympOrig(Age, Asym,lrc),TESE_naive_DF)
-# summary(TESE_naiveGrowth_nls)
-# 
-# TESE_plotDF <- expand.grid(Age=seq(0,20))
-# TESE_plotDF$TotalSize <- exp(predict(TESE_naiveGrowth_nls,TESE_plotDF))
-# 
-# TESE_plotDF$Species <- "Terminalia sericea"
-# COMO_plotDF$Species <- "Colophospermum mopane"
-# COAP_plotDF$Species <- "Combretum apiculatum"
-# 
-# 
-# 
-# 
-# displayPlotted <- rbind(TESE_plotDF,COMO_plotDF)
-# displayPlotted <- rbind(displayPlotted,COAP_plotDF)
-# 
-# displayPlotted$Species <- as.factor(displayPlotted$Species)
-# #levels(naive_growth$Species)<- c("C. mopane","C. apiculatum","T. sericea")
-# levels(displayPlotted$Species)<- c("C. mopane","C. apiculatum","T. sericea")
-
-
-#write.csv(displayPlotted,file="/Users/danielg7/Documents/Output/displayPlotted.csv")
-#write.csv(naive_growth,file="/Users/danielg7/Documents/Output/naive_growth.csv")
 ```
 
 
